@@ -1,0 +1,24 @@
+# PlatformIO build output
+.pio/
+.vscode/
+
+# Generated blocklist (build it with tools/build_blocklist.py)
+data/blocklist.bin
+**/blocklist.bin
+**/littlefs.bin
+AdBlocker Blocklists/*.bin
+/firmware.bin
+
+# WiFi credentials (copy src/secrets.example.h -> src/secrets.h)
+src/secrets.h
+**/secrets.h
+
+# Backups / scratch
+*.bak
+
+# Local archives and installers are not part of the current project release
+/Previous Versions/
+/python-manager-26.3.msix
+/--help
+/data/test_blocklist.bin
+**/__pycache__/

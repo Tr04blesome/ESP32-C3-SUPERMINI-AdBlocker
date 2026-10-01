@@ -1,0 +1,5 @@
+# Single-app layout for 4MB flash: 128KB of unused app space is reassigned to LittleFS.
+# Name,     Type, SubType, Offset,   Size
+nvs,        data, nvs,     0x9000,   0x5000
+app0,       app,  factory, 0x10000,  0x130000
+spiffs,     data, spiffs,  0x140000, 0x2c0000
