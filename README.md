@@ -1,43 +1,10 @@
-# esp32-c3-adblock
+# ESP32-C3 Super Mini AdBlocker
 
-A **Pi-hole-style DNS ad-blocker** that runs on a **$2 ESP32-C3** — *no PSRAM required*.
+A DNS sinkhole for ESP32-C3 boards with 4 MB flash and no PSRAM. It stores domains as sorted, five-byte (40-bit) FNV-1a hashes in flash and binary-searches them instead of loading the blocklist into RAM. A match returns `0.0.0.0`; other DNS queries are forwarded to Quad9 (`9.9.9.9`).
 
-> 📰 Featured on [Tom's Hardware](https://www.tomshardware.com/networking/clever-hacker-fits-537-000-domains-in-a-tiny-usd5-esp32-ad-blocking-dongle-firmware-uses-only-around-50kb-of-ram-and-can-answer-blocked-lookups-in-10-milliseconds), [XDA Developers](https://www.xda-developers.com/this-tiny-esp32-powered-gadget-blocks-537000-domains-only-uses-50kb-of-ram/), and [Korben](https://korben.info/en/half-million-ad-blocking-domains-50kb-ram-esp32.html).
+The current partition layout supports a blocklist of up to **500,000 hash entries**. At that size the binary search takes about 19 flash reads per hash lookup. The list uses about 2.5 MB; it is not included in the browser firmware installer.
 
-The trick everyone misses: you don't need to keep the blocklist in RAM. Store the
-domains as **sorted 40-bit hashes in flash** and binary-search them. 140,000+ domains
-fit in ~0.7 MB of flash and are matched in ~10 ms, using **~50 KB of RAM**.
-
-```
-query in ──▶ extract domain ──▶ FNV-1a hash (+ parent suffixes)
-         ──▶ binary-search the flash hash table
-              ├─ hit  ──▶ answer 0.0.0.0   (sinkholed)
-              └─ miss ──▶ forward to upstream resolver, relay the reply
-```
-
-## Why this is interesting
-
-Most ESP32 DNS sinkholes load the blocklist (domain *strings*) into RAM, so they
-demand PSRAM. This project stores fixed **5-byte (40-bit) hashes in flash** instead:
-
-| | string-in-RAM approach | this (hash-in-flash) |
-|---|---|---|
-| Hardware | ESP32 + PSRAM (~$8) | ESP32-C3, no PSRAM (~$2) |
-| 141k domains | ~2.5 MB of RAM | **0.67 MB of flash** |
-| RAM used | most of it | **~50 KB** |
-| Lookup | string compare | ~18 flash reads (~10 ms incl. WiFi RTT) |
-| Collisions | n/a | 0 at 141k (1 at 537k) |
-
-**Why 40 bits?** It's the sweet spot for this flash budget. Collisions follow the
-birthday bound — at 141k domains you get ~0, at 537k about 1 (i.e. one unlucky
-domain gets over-blocked). Dropping to 32 bits would save 20% of the flash but
-cost ~7 collisions at 250k; going to 64 bits wastes 3 bytes per domain to solve
-a problem you don't have.
-
-The same trick works on bigger chips — it isn't a C3 workaround. On a 16 MB
-ESP32-S3 these hashes hold **~2.7M domains** vs ~466k for strings in 8 MB of
-PSRAM. Hashes in flash beat strings in PSRAM basically everywhere; the C3 just
-makes it undeniable.
+The blocklist builder excludes Reddit, YouTube, and other listed social/video roots, including their subdomains. Very large lists can still contain false positives outside those exclusions.
 
 ## Hardware
 
@@ -58,56 +25,52 @@ Printing notes:
   near it, or your RSSI will suffer.
 - Leave the vents open: the board idles around 45–55 °C.
 
-## Build & flash (PlatformIO)
+## Browser Web Flasher
 
-One USB flash to get going — after that, **firmware and blocklist both update over WiFi** (see below).
+Open the [C3 AdBlocker Web Flasher](https://tr04blesome.github.io/ESP32-C3-SUPERMINI-AdBlocker/) in Chrome or Edge on a desktop computer, connect the ESP32-C3 by USB, and choose **Connect & Install**. The installer flashes the bootloader, partition table, and firmware. It includes **no Wi-Fi credentials and no blocklist**. A clean first install prompts to erase the device; this clears existing data.
 
-> ⚠️ Use a **current PlatformIO** — the VSCode PlatformIO extension's bundled core, or
-> `pip install -U platformio` in a venv. The distro/apt `platformio` package (e.g. 4.3.4) is
-> too old and fails with `AttributeError: ... 'resultcallback'` (issue #4). A one-click browser installer is on the way (hosting TBD).
+After flashing, join the open `C3-AdBlock-XXXX` access point and enter the Wi-Fi name and password on the setup page. The device does not include a blocklist until you upload one from the dashboard.
 
-```bash
-# 1. (optional) set WiFi creds at compile time — or skip this and use the
-#    on-device setup portal (below). secrets.h is gitignored, stays local.
-cp src/secrets.example.h src/secrets.h
-#    then edit src/secrets.h -> WIFI_SSID / WIFI_PASS
+## Build from Source
 
-# 2. build the blocklist hash table (default = StevenBlack base + Hagezi Light,
-#    ~140k domains, WhatsApp/social safe)
-python3 tools/build_blocklist.py data/blocklist.bin
+Use a current PlatformIO Core. Build the credential-free firmware used by the web flasher with:
 
-# 3. flash firmware + the blocklist filesystem (the one and only USB flash)
-pio run -t upload
-pio run -t uploadfs
-
-# 4. watch it boot, note the IP / open the dashboard
-pio device monitor          # -> http://c3adblock.local
+```sh
+pio run -e webflasher
 ```
 
-### WiFi setup (no re-flash needed)
+The image is `.pio/build/webflasher/firmware.bin`. The regular `c3` environment includes `src/secrets.h` as a local fallback; do not commit that file or put personal credentials in public builds.
 
-If it can't connect (or you never set `secrets.h`), it starts an open access point
-**`C3-AdBlock-XXXX`** with a captive portal — join it from a phone, pick your network,
-type the password, done. To move it to a new network later: open `http://c3adblock.local/forgetwifi`,
-or hold the **BOOT** button while powering on, and the setup portal comes back.
+## Blocklists
 
-## Over-the-air updates (no more USB)
+Build the default list (StevenBlack base plus Hagezi Light) with:
 
-The dashboard at **http://c3adblock.local** does it all:
+```sh
+py tools/build_blocklist.py data/blocklist.bin
+```
 
-- **Blocklist** — drop a freshly built `blocklist.bin` into *Blocklist → Upload*, or set a
-  URL under *Remote auto-update* and the device pulls a prebuilt `blocklist.bin`
-  on a schedule (e.g. a GitHub release asset — update it once, every device fetches it).
-- **Firmware** — upload `.pio/build/c3/firmware.bin` under *Firmware → OTA update*; the
-  device verifies it and reboots into the new image. Or push over WiFi from the CLI:
-  ```bash
-  pio run -t upload --upload-port c3adblock.local --upload-protocol espota
-  ```
+For a large social-safe list, the checked-in builder supports up to 500,000 hash entries. This command uses StevenBlack, Hagezi Ultimate, and OISD Big, while retaining the builder's social and YouTube exclusions:
 
-**4 MB flash tradeoff:** the default partition table uses one app slot, leaving ~2.6 MB
-for the blocklist and fitting the aggressive list. This sacrifices firmware OTA; reflash
-firmware over USB after changing `partitions.csv`. A dual-OTA layout leaves ~1.3 MB for
-the blocklist (**~250k domains max**).
+```sh
+py tools/build_blocklist.py "AdBlocker Blocklists/MaxSocialSafeBlocklist.bin" \
+  "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-gambling-porn-social/hosts" \
+  "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/ultimate.txt" \
+  "https://big.oisd.nl/domainswild"
+```
+
+The output is a five-byte-per-entry binary file. Upload it in the dashboard’s **Blocklist — Upload** section. The current firmware does not bundle a list in its web-flasher image.
+
+## Network Setup
+
+The device initially uses static IP `192.168.1.99` with gateway `192.168.1.1`. The setup page and dashboard let you change the static address or switch to DHCP. Network changes restart the device. When Wi-Fi disconnects, the blue LED blinks; firmware retries the connection with increasing delays up to 30 seconds.
+
+To use the sinkhole network-wide, set the router’s DNS server to the device’s current IP address. A public secondary DNS server may allow some clients to bypass filtering. The dashboard is at `http://c3adblock.local` when mDNS works, or at the device IP.
+
+The dashboard supports up to **192 tracked clients**. Unflagged clients inactive for 24 hours are removed; client exceptions are kept. Limits are 200 custom blocked domains, 100 Ban allowlist domains, and 32 saved client exceptions of each type. The **Reset device** button erases saved data, including Wi-Fi credentials, and returns to first-time setup.
+
+## Flash Layout
+
+The current 4 MB layout in [partitions.csv](partitions.csv) reserves a **1.1875 MiB app slot** and a **2.75 MiB LittleFS partition**. It is a single-app layout, not a dual-firmware-OTA layout. The 500,000-entry blocklist occupies 2.5 MB, leaving filesystem room for settings and metadata. The web flasher publishes firmware only; it does not publish or overwrite user blocklists.
 
 ## Use it
 
@@ -133,21 +96,8 @@ dig @<c3-ip> github.com        # -> real IP  (forwarded)
 - DNS clients add an **EDNS OPT** record; a blocked reply must contain only the
   question + answer (ANCOUNT=1, NSCOUNT=ARCOUNT=0) or it's malformed.
 
-## Done / how it could grow
-
-- ✅ Web dashboard — per-client block/allow counts, ban a client, add custom domains
-- ✅ mDNS (`c3adblock.local`) for discovery
-- ✅ OTA — firmware + blocklist update over WiFi, plus scheduled remote blocklist pulls
-- ✅ Captive-portal WiFi setup (no hardcoded creds) + one-click browser web-installer
-- ⬜ Bucketed prefix index — ~18 flash reads/lookup → ~1–2 (issue #3), the throughput win
-- ⬜ Act as the DHCP server (hand itself out as DNS) for true plug-and-play
-
 ## Credits
 
-Inspired by [s60sc/ESP32_AdBlocker](https://github.com/s60sc/ESP32_AdBlocker) — the
-"answer 0.0.0.0 for blocklisted domains" idea. This is an independent from-scratch
-implementation focused on the hash-in-flash optimization for PSRAM-less chips.
+Modded by [ISSAM. K](https://bit.ly/m/IssamKanzi)
 
-## License
-
-MIT — see [LICENSE](LICENSE).
+Based on M-Abozaid's [esp32-c3-adblock](https://github.com/M-Abozaid/esp32-c3-adblock) (Inspired by [s60sc/ESP32_AdBlocker](https://github.com/s60sc/ESP32_AdBlocker) — the "answer 0.0.0.0 for blocklisted domains" idea. This is an independent from-scratch implementation focused on the hash-in-flash optimization for PSRAM-less chips.)
