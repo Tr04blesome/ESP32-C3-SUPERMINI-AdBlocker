@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>C3 AdBlocker — flash it in your browser</title>
+<title>C3 AdBlocker + — flash it in your browser</title>
 <meta name="description" content="Flash the $2 ESP32-C3 network ad-blocker straight from your browser. No toolchain, no PlatformIO.">
 <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
 <style>
@@ -12,7 +12,8 @@
   body { font: 16px/1.6 system-ui, -apple-system, sans-serif; margin: 0; background: #0d1117; color: #c9d1d9; }
   .wrap { max-width: 640px; margin: 0 auto; padding: 48px 20px 80px; }
   h1 { font-size: 30px; margin: 0 0 6px; }
-  h1 .g { color: #3fb950; }
+  h1 .brand-name { color: #fff; }
+  h1 .brand-plus { color: #8a9a5b; font-weight: 800; }
   .price { color: #ffd400; font-weight: 700; }
   .sub { color: #8b949e; margin: 0 0 28px; }
   .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 22px; margin: 18px 0; }
@@ -30,7 +31,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>🛡️ <span class="g">C3 AdBlocker</span></h1>
+  <h1>🛡️ <span class="brand-name">C3 AdBlocker</span> <span class="brand-plus">+</span></h1>
   <p class="sub">Install the firmware on an ESP32-C3 directly from your browser. No toolchain needed.</p>
 
   <div class="card" style="text-align:center">
