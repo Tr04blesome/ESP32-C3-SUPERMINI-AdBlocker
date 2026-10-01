@@ -60,6 +60,8 @@ py tools/build_blocklist.py "AdBlocker Blocklists/MaxSocialSafeBlocklist.bin" \
 
 The output is a five-byte-per-entry binary file. Upload it in the dashboard’s **Blocklist — Upload** section. The current firmware does not bundle a list in its web-flasher image.
 
+OR get the readymade blocklist of your choice in the files. All of them are social media and youtube safe. You can still add up to 100 domains to the allow list just to be certain, and 200 more custom blocked domains.
+
 ## Network Setup
 
 The device initially uses static IP `192.168.1.99` with gateway `192.168.1.1`. The setup page and dashboard let you change the static address or switch to DHCP. Network changes restart the device. When Wi-Fi disconnects, the blue LED blinks; firmware retries the connection with increasing delays up to 30 seconds.
