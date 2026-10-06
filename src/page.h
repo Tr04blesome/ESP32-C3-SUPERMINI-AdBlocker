@@ -7,8 +7,7 @@ const char PAGE[] PROGMEM = R"HTML(<!doctype html><html><head><meta charset=utf-
 body{font:14px system-ui,sans-serif;margin:0;background:#0d1117;color:#c9d1d9}
 header{background:#161b22;padding:14px 18px;border-bottom:1px solid #30363d}
 h1{margin:0;font-size:18px}h1 span{color:#3fb950}.wrap{padding:16px;max-width:1000px;margin:auto}
-header #networkmsg{min-height:18px;margin-top:6px;text-align:center;color:#8b949e;font-size:12px}header #networkmsg:empty{display:none}
-header h1{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px}.header-separator{color:#8b949e}#staticipbtn{font:inherit;padding:0;background:transparent;border:0;border-radius:0;color:#f85149;text-decoration:line-through;text-decoration-color:#f85149;text-decoration-thickness:2px}#staticipbtn.active{background:transparent;border:0;color:#58a6ff;text-decoration:none}#deviceip{width:125px;box-sizing:border-box;text-align:center;font:inherit;padding:4px 6px}#deviceip:disabled{color:#8b949e;opacity:1}#resetbtn{background:rgba(248,81,73,.08);border-color:rgba(248,81,73,.45);color:#ff7b72;padding:8px 14px}#resetbtn:hover{background:rgba(248,81,73,.16)}
+header h1{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px}.header-separator{color:#8b949e}#deviceip{color:#8b949e;font-size:15px;font-weight:400}#resetbtn{background:rgba(248,81,73,.08);border-color:rgba(248,81,73,.45);color:#ff7b72;padding:8px 14px}#resetbtn:hover{background:rgba(248,81,73,.16)}
 header h1 .brand-title{color:#c9d1d9}header h1 .brand-plus{font-weight:800;color:#8a9a5b}
 .cards{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}
 .card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px 16px;flex:1;min-width:120px}
@@ -32,7 +31,7 @@ h2{font-size:14px;color:#8b949e;margin:18px 0 8px}
 #ct #col-host,#ct #col-mac{width:auto}#ct #col-ip{width:112px!important}#ct #col-blocked,#ct #col-allowed{width:70px!important}#ct #col-ban{width:54px!important}#ct #col-banplus{width:36px!important}#ct td:nth-child(n+4){overflow:hidden;text-overflow:ellipsis}#ct th:nth-last-child(2),#ct td:nth-last-child(2){padding-right:6px}#ct th:last-child,#ct td:last-child{padding-left:6px;padding-right:4px}
 @media(max-width:600px){#ct th,#ct td{padding-left:3px;padding-right:3px}#ct #col-ip{width:92px!important}#ct #col-blocked,#ct #col-allowed{width:52px!important}#ct #col-ban{width:32px!important}#ct #col-banplus{width:32px!important}}
 </style></head><body>
-<header><h1><span class=brand-title>🛡️ C3 AdBlock</span><span class=brand-plus>+</span><span class=header-separator>|</span><button id=staticipbtn type=button class=active aria-pressed=true onclick="toggleStaticIp()">Static IP</button><span>:</span><input id=deviceip type=text value="192.168.1.99" maxlength=15 size=15 aria-label="Device IP address" onchange="saveStaticIp()"></h1><div id=networkmsg role=status aria-live=polite></div></header><div class=wrap>
+<header><h1><span class=brand-title>🛡️ C3 AdBlock</span><span class=brand-plus>+</span><span class=header-separator>|</span><span id=deviceip aria-label="Current device IP address">...</span></h1></header><div class=wrap>
 <div class="control-section led-section"><div class=led-head><div class=section-head><span style=font-size:20px>💡</span><b>LED Control</b></div><div class="section-controls led-controls"><button id=connectionledbtn onclick=toggleConnectionLed() aria-label="Toggle connection LED">On</button></div></div><div class=led-schedule><div class=section-head><span style=font-size:20px>🕒</span><b>Schedule</b></div><div class=section-controls><label>Start <input type=time id=ledstart onchange="saveSchedules()"></label><label>Stop <input type=time id=ledstop onchange="saveSchedules()"></label><label><input type=checkbox id=ledschedule onchange="saveSchedules()"> Enable</label></div></div></div>
 <div class="control-section schedule-group"><div id=blockbar class=group-control>
 <div class=section-head><span id=blockdot style=font-size:20px>🛡️</span><b id=blockstate data-on=1>Adblocking</b></div>
@@ -55,9 +54,6 @@ h2{font-size:14px;color:#8b949e;margin:18px 0 8px}
 <div style="text-align:center;margin:28px 0 12px"><button id=resetbtn onclick=resetDevice()>Reset device</button></div>
 </div><script>
 function fmt(n){return n.toLocaleString()}
-function saveNetworkSettings(enabled,ip){networkmsg.textContent=enabled?'Reconnecting at '+ip+'. Open that address and refresh.':'Reconnecting with a router-assigned IP. Open the new address and refresh.';fetch('/setnetwork?static='+(enabled?1:0)+'&ip='+encodeURIComponent(ip)).then(async response=>{if(!response.ok){networkmsg.textContent='';alert(await response.text());return}staticipbtn.disabled=true;deviceip.disabled=true}).catch(()=>{staticipbtn.disabled=true;deviceip.disabled=true})}
-function toggleStaticIp(){let enabled=staticipbtn.getAttribute('aria-pressed')!=='true';let ip=deviceip.dataset.staticIp||'192.168.1.99';let message=enabled?'Switch to static IP '+ip+'? The device will disconnect and reconnect. Open that address and refresh.':'Switch to DHCP? The device will disconnect and reconnect with a router-assigned IP. Find its new IP address to reconnect or via c3adblock.local';if(confirm(message))saveNetworkSettings(enabled,ip)}
-function saveStaticIp(){saveNetworkSettings(true,deviceip.value.trim())}
 function resetDevice(){if(confirm('Erase all saved data, including the WiFi name and password, and return to first-time WiFi setup?'))fetch('/reset').then(()=>{document.body.innerHTML='<p style="text-align:center;margin:48px">Resetting. Join the C3-AdBlock setup network to enter WiFi credentials.</p>'}).catch(()=>{document.body.innerHTML='<p style="text-align:center;margin:48px">Resetting. Join the C3-AdBlock setup network to enter WiFi credentials.</p>'})}
 const clientColumnWidths={host:['auto','18px'],mac:['auto','18px']};
 function clientColumnCompact(name){return localStorage.getItem('client-col-'+name)==='1'}
@@ -77,16 +73,18 @@ function banPlusButton(ip,on,spared){let active=on&&!spared;let title=spared?'Re
 function minTime(n){return String(Math.floor(n/60)%24).padStart(2,'0')+':'+String(n%60).padStart(2,'0')}
 function timeMin(v){let p=v.split(':');return (+p[0])*60+(+p[1]||0)}
 function saveSchedules(){if(!schstart.value||!schstop.value||!schplusstart.value||!schplusstop.value||!ledstart.value||!ledstop.value)return;fetch('/setschedule?a='+(schedadblock.checked?1:0)+'&p='+(schedbanplus.checked?1:0)+'&s='+timeMin(schstart.value)+'&t='+timeMin(schstop.value)+'&ps='+timeMin(schplusstart.value)+'&pt='+timeMin(schplusstop.value)+'&le='+(ledschedule.checked?1:0)+'&ls='+timeMin(ledstart.value)+'&lt='+timeMin(ledstop.value)+'&z='+(-new Date().getTimezoneOffset())).then(load)}
-async function load(){let s=await(await fetch('/stats.json')).json();
+let dashboardLoadPending=false,dashboardReloadRequested=false;
+async function load(){if(dashboardLoadPending){dashboardReloadRequested=true;return}dashboardLoadPending=true;try{do{dashboardReloadRequested=false;await refreshDashboard()}while(dashboardReloadRequested)}catch(error){console.error('Dashboard refresh failed:',error)}finally{dashboardLoadPending=false}}
+async function refreshDashboard(){let s=await(await fetch('/stats.json')).json();
 allowcount.textContent=s.allow.length+'/100';customcount.textContent=s.custom.length+'/200';
-let staticEnabled=!!s.staticIpEnabled;staticipbtn.classList.toggle('active',staticEnabled);staticipbtn.setAttribute('aria-pressed',staticEnabled?'true':'false');deviceip.disabled=!staticEnabled;deviceip.dataset.staticIp=s.staticIp||'192.168.1.99';if(document.activeElement!=deviceip)deviceip.value=staticEnabled?deviceip.dataset.staticIp:s.ip;
+deviceip.textContent=s.ip||'unavailable';
 let on=s.blocking!==false;blockstate.dataset.on=on?'1':'0';
 blockdot.textContent=on?'🛡️':'⏸️';blockbar.style.borderColor=on?'#30363d':'#f0883e';
 blockstate.textContent=on?'Adblocking':(s.resumeIn>0?'Paused - resumes in '+s.resumeIn+'s':'Paused');
 pausebtn.textContent=on?'Pause':'Resume';pausedur.style.display=on?'':'none';
  banplusstate.dataset.on=s.banPlusActive?'1':'0';banplusbar.style.borderColor=s.banPlusActive?'#f85149':'#30363d';banplusdot.textContent='🚫';banplusstate.textContent=s.banPlusActive?'Active'+(s.banPlusResumeIn>0?' - stops in '+s.banPlusResumeIn+'s':''):'Ban';banplusbtn.textContent=s.banPlusActive?'Stop':'Start';pausedurplus.style.display=s.banPlusActive?'none':'';if(document.activeElement!=schedadblock)schedadblock.checked=!!s.scheduleAdblock;if(document.activeElement!=schedbanplus)schedbanplus.checked=!!s.scheduleBanPlus;if(document.activeElement!=schstart)schstart.value=minTime(s.scheduleStart);if(document.activeElement!=schstop)schstop.value=minTime(s.scheduleStop);if(document.activeElement!=schplusstart)schplusstart.value=minTime(s.schedulePlusStart);if(document.activeElement!=schplusstop)schplusstop.value=minTime(s.schedulePlusStop);
 connectionledbtn.textContent=s.connectionLed?'On':'Off';connectionledbtn.classList.toggle('on',!!s.connectionLed);connectionledbtn.classList.toggle('off',!s.connectionLed);if(document.activeElement!=ledschedule)ledschedule.checked=!!s.ledScheduleEnabled;if(document.activeElement!=ledstart)ledstart.value=minTime(s.ledScheduleStart);if(document.activeElement!=ledstop)ledstop.value=minTime(s.ledScheduleStop);
-sys.innerHTML=[['Total blocked',fmt(s.blocked),'b'],['Total allowed',fmt(s.allowed),'a'],['Blocklist',fmt(s.domains)+' domains',''],
+sys.innerHTML=[['Firmware','v'+s.version,''],['Total blocked',fmt(s.blocked),'b'],['Total allowed',fmt(s.allowed),'a'],['Blocklist',fmt(s.domains)+' domains',''],
 ['Clients',s.clients.length,''],['WiFi',s.rssi+' dBm',''],['Temp',s.temp+' °C',''],['Free RAM',Math.round(s.heap/1024)+' KB',''],['Uptime',s.uptime,'']]
 .map(c=>`<div class=card><div class="v ${c[2]}">${c[1]}</div><div class=l>${c[0]}</div></div>`).join('');
 ct.tBodies[0].innerHTML=s.clients.sort((a,b)=>(b.blocked+b.allowed)-(a.blocked+a.allowed)).map(c=>

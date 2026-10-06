@@ -1,4 +1,4 @@
-# C3 AdBlocker +
+# C3 AdBlocker + v1.1
 
 A DNS sinkhole for ESP32-C3 boards with 4 MB flash and no PSRAM. It stores domains as sorted, five-byte (40-bit) FNV-1a hashes in flash and binary-searches them instead of loading the blocklist into RAM. A match returns `0.0.0.0`; other DNS queries are forwarded to Quad9 (`9.9.9.9`).
 
@@ -27,7 +27,7 @@ Printing notes:
 
 ## Browser Web Flasher
 
-Open the [C3 AdBlocker + Web Flasher](https://tr04blesome.github.io/ESP32-C3-SUPERMINI-AdBlocker/) in Chrome or Edge on a desktop computer, connect the ESP32-C3 by USB, and choose **Connect & Install**. The installer flashes the bootloader, partition table, and firmware. It includes **no Wi-Fi credentials and no blocklist**. A clean first install prompts to erase the device; this clears existing data.
+Open the [C3 AdBlocker + Web Flasher](https://tr04blesome.github.io/ESP32-C3-SUPERMINI-AdBlocker/) in Chrome or Edge on a desktop computer, connect the ESP32-C3 by USB, and choose **Connect & Install**. Version **1.1** adds persistent DHCP/static-IP selection, a live-IP dashboard header, and more responsive dashboard handling. The installer flashes the bootloader, partition table, and firmware. It includes **no Wi-Fi credentials and no blocklist**. A clean first install prompts to erase the device; this clears existing data.
 
 After flashing, join the open `C3-AdBlock-XXXX` access point and enter the Wi-Fi name and password on the setup page. The device does not include a blocklist until you upload one from the dashboard.
 
@@ -58,13 +58,15 @@ py tools/build_blocklist.py "AdBlocker Blocklists/MaxSocialSafeBlocklist.bin" \
   "https://big.oisd.nl/domainswild"
 ```
 
-The output is a five-byte-per-entry binary file. Upload it in the dashboard’s **Blocklist — Upload** section. The current firmware does not bundle a list in its web-flasher image.
+The output is a five-byte-per-entry binary file. Upload it in the dashboard’s **Blocklist — Upload** section. Large uploads yield to the ESP32 scheduler to avoid watchdog resets; filesystem write or interrupted-upload errors are reported instead of accepting a truncated list. The current firmware does not bundle a list in its web-flasher image.
 
 OR get the readymade blocklist of your choice in the files. All of them are social media and youtube safe. You can still add up to 100 domains to the allow list just to be certain, and 200 more custom blocked domains.
 
 ## Network Setup
 
-The device initially uses static IP `192.168.1.99` with gateway `192.168.1.1`. The setup page and dashboard let you change the static address or switch to DHCP. Network changes restart the device. When Wi-Fi disconnects, the blue LED blinks; firmware retries the connection with increasing delays up to 30 seconds.
+During Wi-Fi setup, leave **Use static IP** unchecked to let the router assign an address, or check it and enter an available `192.168.x.2`–`192.168.x.254` address. Only one mode is selected at a time. The selected mode and address are stored in non-volatile settings and survive power loss. Existing installations that only have the legacy default `192.168.1.99` are migrated to DHCP; previously selected custom addresses are retained. The dashboard header shows the device’s current IP. When Wi-Fi disconnects, the blue LED blinks; firmware retries the connection with increasing delays up to 30 seconds.
+
+Ad-blocking is on by default and stays on overnight. It only follows the configured start/stop times when **Enable** is checked under **Adblocking Schedule**.
 
 To use the sinkhole network-wide, set the router’s DNS server to the device’s current IP address. A public secondary DNS server may allow some clients to bypass filtering. The dashboard is at `http://c3adblock.local` when mDNS works, or at the device IP.
 

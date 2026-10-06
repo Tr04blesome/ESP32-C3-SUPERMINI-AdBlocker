@@ -25,16 +25,21 @@ static const char* WIFI_PASS = "";
 #endif
 
 // ---- config ----
+static const char* FIRMWARE_VERSION = "1.1.0";
 static const IPAddress UPSTREAM(9, 9, 9, 9);     // Quad9
 static const IPAddress WIFI_STATIC_IP(192, 168, 1, 99);
-static const IPAddress WIFI_GATEWAY(192, 168, 1, 1);
 static const IPAddress WIFI_SUBNET(255, 255, 255, 0);
 static bool staticIpEnabled = true;
 static IPAddress configuredStaticIp = WIFI_STATIC_IP;
 static uint32_t wifiReconnectAtMs = 0;
 static uint32_t wifiReconnectDelayMs = 1000;
+static bool statusLedKnown = false;
+static bool statusLedLast = false;
 static bool parseStaticIp(const String& value, IPAddress& address) {
-  return address.fromString(value) && address[0] == 192 && address[1] == 168 && address[2] == 1 && address[3] >= 2 && address[3] <= 254;
+  return address.fromString(value) && address[0] == 192 && address[1] == 168 && address[3] >= 2 && address[3] <= 254;
+}
+static IPAddress staticIpGateway(const IPAddress& address) {
+  return IPAddress(address[0], address[1], address[2], 1);
 }
 static const uint16_t DNS_PORT = 53;
 static const char* BLOCKLIST_PATH = "/blocklist.bin";
@@ -93,7 +98,7 @@ bool banPlusOn = false;
 uint32_t banPlusResumeAt = 0;
 int8_t banPlusOverride = -1;
 bool scheduleEnabled = false;
-bool scheduleAdblock = true;
+bool scheduleAdblock = false;
 bool scheduleBanPlus = false;
 uint16_t scheduleStart = 480;
 uint16_t scheduleStop = 1320;
@@ -126,6 +131,9 @@ static bool scheduleWindowActive(uint16_t start, uint16_t stop, bool enabled) {
 static bool schedulePlusWindowActive() {
   return scheduleWindowActive(schedulePlusStart, schedulePlusStop, scheduleBanPlus);
 }
+static bool adblockScheduleEnabled() {
+  return scheduleEnabled && scheduleAdblock;
+}
 static bool ledScheduleActive() {
   return scheduleWindowActive(ledScheduleStart, ledScheduleStop, ledScheduleEnabled);
 }
@@ -142,9 +150,9 @@ static bool ledControlOn() {
   return ledScheduleEnabled ? ledScheduleActive() : connectionLedOn;
 }
 static void updateScheduleState() {
-  bool active = scheduleWindowActive(scheduleStart, scheduleStop, scheduleAdblock);
+  bool active = scheduleWindowActive(scheduleStart, scheduleStop, adblockScheduleEnabled());
   if (active != scheduleWindowLast || !scheduleWindowKnown) {
-    if (scheduleAdblock) { blockingOn = active; scheduleOverride = -1; }
+    if (adblockScheduleEnabled()) { blockingOn = active; scheduleOverride = -1; }
   }
   bool activePlus = schedulePlusWindowActive();
   if (activePlus != schedulePlusWindowLast || !schedulePlusWindowKnown) {
@@ -157,7 +165,7 @@ static void updateScheduleState() {
 static bool featureActive(bool manualOn, bool scheduled) {
   return manualOn && (!scheduled || scheduleWindowActive(scheduleStart, scheduleStop, true));
 }
-static bool blockingActive() { return scheduleOverride >= 0 ? scheduleOverride == 1 : featureActive(blockingOn, scheduleAdblock); }
+static bool blockingActive() { return scheduleOverride >= 0 ? scheduleOverride == 1 : featureActive(blockingOn, adblockScheduleEnabled()); }
 static bool banPlusActive() {
   if (banPlusOverride >= 0) return banPlusOverride == 1;
   return banPlusOn && (!scheduleBanPlus || schedulePlusWindowActive());
@@ -173,6 +181,7 @@ static void loadSchedule() {
     schedulePlusStart = constrain(lines[7].toInt(), 0, 1439); schedulePlusStop = constrain(lines[8].toInt(), 0, 1439);
   } else {
     scheduleEnabled = lines[0] == "1";
+    scheduleAdblock = scheduleEnabled;
     if (count > 1) scheduleStart = constrain(lines[1].toInt(), 0, 1439);
     if (count > 2) scheduleStop = constrain(lines[2].toInt(), 0, 1439);
     if (count > 3) scheduleTz = constrain(lines[3].toInt(), -840, 840);
@@ -284,8 +293,11 @@ static void setWifiLed(bool on) {
 static void updateStatusLeds() {
   const bool wifiConnected = isWifiConnected();
   const bool ledOn = wifiConnected ? ledControlOn() : ((millis() / 1000UL) % 2 == 0);
-  setWifiLed(ledOn);
-  Serial.printf("[led] connection=%s wifi=%s\n", connectionLedOn ? "on" : "off", wifiConnected ? "up" : "down");
+  if (!statusLedKnown || ledOn != statusLedLast) {
+    setWifiLed(ledOn);
+    statusLedLast = ledOn;
+    statusLedKnown = true;
+  }
 }
 
 // ---------- hashing / matching ----------
@@ -484,14 +496,13 @@ static int buildBlocked(int qend, uint16_t qtype) {
 static int forwardUpstream(int qlen) {
   upstreamCli.beginPacket(UPSTREAM, 53); upstreamCli.write(buf, qlen); upstreamCli.endPacket();
   uint32_t t0 = millis();
-  while (millis() - t0 < 1000) { int sz = upstreamCli.parsePacket(); if (sz > 0) return upstreamCli.read(buf, sizeof(buf)); delay(1); }
+  while (millis() - t0 < 250) { int sz = upstreamCli.parsePacket(); if (sz > 0) return upstreamCli.read(buf, sizeof(buf)); delay(1); }
   return 0;
 }
-// Drain a whole RX burst per call (capped, so web/OTA still get a turn) instead of
-// one packet per loop iteration. Returns true if any query was handled this call.
+// Handle one DNS query per pass so upstream timeouts cannot starve dashboard requests.
 static bool handleDns() {
   bool did = false;
-  for (int budget = 0; budget < 16; budget++) {
+  for (int budget = 0; budget < 1; budget++) {
     int sz = dnsServer.parsePacket(); if (sz <= 0) break;
     did = true;
     IPAddress cip = dnsServer.remoteIP(); uint16_t cport = dnsServer.remotePort();
@@ -518,7 +529,7 @@ static String jesc(const String& s) { String o; for (char ch : s) { if (ch == '"
 static void handleStats() {
   uint32_t up = millis() / 1000;
   char ut[24]; snprintf(ut, sizeof(ut), "%lud %luh %lum", up/86400, (up%86400)/3600, (up%3600)/60);
-  String j = "{\"ip\":\"" + WiFi.localIP().toString() + "\",\"staticIpEnabled\":" + (staticIpEnabled ? "true" : "false") +
+  String j = "{\"version\":\"" + String(FIRMWARE_VERSION) + "\",\"ip\":\"" + WiFi.localIP().toString() + "\",\"staticIpEnabled\":" + (staticIpEnabled ? "true" : "false") +
              ",\"staticIp\":\"" + configuredStaticIp.toString() + "\",\"blocked\":" + totalBlocked + ",\"allowed\":" + totalAllowed +
              ",\"domains\":" + numHashes + ",\"rssi\":" + WiFi.RSSI() + ",\"temp\":" + String(temperatureRead(), 1) +
              ",\"heap\":" + ESP.getFreeHeap() + ",\"uptime\":\"" + ut + "\"" +
@@ -579,38 +590,67 @@ static bool commitNewBlocklist() {                  // /blocklist.new -> live (v
   File f = LittleFS.open("/blocklist.new", "r");
   size_t sz = f ? f.size() : 0; if (f) f.close();
   bool ok = sz > 0 && (sz % HASH_BYTES) == 0;       // sorted hash blob -> 5-byte multiple
-  if (ok) LittleFS.rename("/blocklist.new", BLOCKLIST_PATH);
-  else    LittleFS.remove("/blocklist.new");
+  if (ok) ok = LittleFS.rename("/blocklist.new", BLOCKLIST_PATH);
+  if (!ok) LittleFS.remove("/blocklist.new");
   reopenBlocklist();
   return ok;
 }
 
 // ---------- OTA blocklist update (browser upload) ----------
 static bool upOk = false;
+static bool upFailed = false;
+static size_t upBytes = 0;
+static const char* upError = "empty or invalid blocklist (size must be a nonzero multiple of 5)";
 static File upFile;
 static void handleUploadDone() {
-  web.send(upOk ? 200 : 500, "text/plain",
-           upOk ? "ok" : "rejected: empty or size not a multiple of 5 (not a blocklist.bin?)");
+  web.send(upOk ? 200 : 500, "text/plain", upOk ? "ok" : String("rejected: ") + upError);
 }
 static void handleUpload() {
   HTTPUpload& u = web.upload();
   switch (u.status) {
     case UPLOAD_FILE_START:
-      upOk = false; beginBlocklistSwap();
+      upOk = false; upFailed = false; upBytes = 0;
+      upError = "could not write the uploaded file to LittleFS";
+      beginBlocklistSwap();
       upFile = LittleFS.open("/blocklist.new", "w");
+      if (!upFile) upFailed = true;
       Serial.printf("[ota] receiving %s\n", u.filename.c_str());
       break;
     case UPLOAD_FILE_WRITE:
-      if (upFile) upFile.write(u.buf, u.currentSize);
+      if (!upFailed && upFile) {
+        size_t written = upFile.write(u.buf, u.currentSize);
+        upBytes += written;
+        if (written != u.currentSize) {
+          upFailed = true;
+          upError = "LittleFS ran out of space during upload";
+          Serial.printf("[ota] short write: %u of %u bytes\n",
+                        (unsigned)written, (unsigned)u.currentSize);
+        }
+      }
+      // The web server parses multipart bodies byte-by-byte; yield between chunks
+      // so large uploads don't starve the ESP32 idle task and trigger its watchdog.
+      delay(0);
       break;
     case UPLOAD_FILE_END:
       if (upFile) upFile.close();
-      upOk = commitNewBlocklist();
+      if (!upFailed && upBytes != u.totalSize) {
+        upFailed = true;
+        upError = "incomplete upload";
+      }
+      if (upFailed) {
+        LittleFS.remove("/blocklist.new");
+        reopenBlocklist();
+        upOk = false;
+      } else {
+        upOk = commitNewBlocklist();
+        if (!upOk) upError = "empty or invalid blocklist (size must be a nonzero multiple of 5)";
+      }
       Serial.printf("[ota] %s -> %u domains\n", upOk ? "OK" : "REJECTED", numHashes);
       break;
     case UPLOAD_FILE_ABORTED:
       if (upFile) upFile.close();
       LittleFS.remove("/blocklist.new"); reopenBlocklist();
+      upFailed = true; upOk = false; upError = "upload interrupted";
       Serial.println("[ota] aborted");
       break;
   }
@@ -667,24 +707,50 @@ static void forgetWifiCredentials() {
   prefs.end();
 }
 static bool connectWiFi() {
-  prefs.begin("wifi", true);
+  if (!prefs.begin("wifi", false)) {
+    Serial.println("[wifi] could not open saved network settings");
+    return false;
+  }
   bool forcePortal = prefs.getBool("force-portal", false);
   String ss = prefs.getString("ssid", "");
   String pw = prefs.getString("pass", "");
-  staticIpEnabled = prefs.getBool("static", true);
+  staticIpEnabled = prefs.getBool("static", false);
   String savedIp = prefs.getString("ip", WIFI_STATIC_IP.toString());
+  bool networkSettingsV2 = prefs.getBool("network-v2", false);
+  if (!networkSettingsV2) {
+    if (staticIpEnabled && savedIp == WIFI_STATIC_IP.toString()) {
+      staticIpEnabled = false;
+      prefs.putBool("static", false);
+      Serial.println("[wifi] migrating legacy default 192.168.1.99 to DHCP");
+    }
+    prefs.putBool("network-v2", true);
+  }
   prefs.end();
   if (forcePortal) {
     Serial.println("WiFi setup requested; skipping saved and fallback credentials");
     return false;
   }
-  if (!configuredStaticIp.fromString(savedIp)) configuredStaticIp = WIFI_STATIC_IP;
+  if (!parseStaticIp(savedIp, configuredStaticIp)) {
+    configuredStaticIp = WIFI_STATIC_IP;
+    if (staticIpEnabled) {
+      staticIpEnabled = false;
+      prefs.begin("wifi", false);
+      prefs.putBool("static", false);
+      prefs.end();
+      Serial.printf("[wifi] invalid saved static IP '%s'; falling back to DHCP\n", savedIp.c_str());
+    }
+  }
+  Serial.printf("[wifi] static IP %s (%s)\n", configuredStaticIp.toString().c_str(),
+                staticIpEnabled ? "enabled" : "disabled");
   const char* ssid = ss.length() ? ss.c_str() : WIFI_SSID;
   const char* pass = ss.length() ? pw.c_str() : WIFI_PASS;
   if (!ssid || !*ssid || strcmp(ssid, "YOUR_WIFI_SSID") == 0) return false;  // unconfigured
   Serial.printf("WiFi: connecting to \"%s\"%s\n", ssid, ss.length() ? " (provisioned)" : " (secrets.h)");
   WiFi.mode(WIFI_STA); WiFi.setSleep(false); WiFi.persistent(false); WiFi.setAutoReconnect(true);
-  if (staticIpEnabled) WiFi.config(configuredStaticIp, WIFI_GATEWAY, WIFI_SUBNET, WIFI_GATEWAY, UPSTREAM);
+  if (staticIpEnabled) {
+    IPAddress gateway = staticIpGateway(configuredStaticIp);
+    WiFi.config(configuredStaticIp, gateway, WIFI_SUBNET, gateway, UPSTREAM);
+  }
   WiFi.begin(ssid, pass);
   uint32_t t0 = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - t0 < 20000) { delay(250); Serial.print("."); }
@@ -704,14 +770,16 @@ static void handlePortalRoot() {
     "<datalist id=nets>" + portalOpts + "</datalist>"
     "<input name=p type=password placeholder='Password' style='width:100%;box-sizing:border-box;padding:11px;margin:6px 0;border-radius:6px;border:1px solid #30363d;background:#161b22;color:#c9d1d9'>"
     "<div style='display:flex;align-items:center;gap:10px;margin:12px 0;color:#c9d1d9'>"
-    "<label style='display:flex;align-items:center;gap:7px'><input id=static type=checkbox name=static value=1 checked>Static IP</label>"
-    "<input id=ip name=ip value='192.168.1.99' maxlength=15 aria-label='Static IP address' style='flex:1;min-width:0;box-sizing:border-box;padding:9px;border-radius:5px;border:1px solid #30363d;background:#161b22;color:#c9d1d9'></div>"
+    "<label style='display:flex;align-items:center;gap:7px'><input id=static type=checkbox name=static value=1>Use static IP</label>"
+    "<input id=ip name=ip placeholder='192.168.x.x' maxlength=15 aria-label='Static IP address' disabled style='flex:1;min-width:0;box-sizing:border-box;padding:9px;border-radius:5px;border:1px solid #30363d;background:#161b22;color:#c9d1d9'></div>"
+    "<p style='color:#8b949e;font-size:12px'>Leave unchecked to use the router-assigned address (DHCP). Check it only if you want to choose a static address.</p>"
+    "<p style='color:#8b949e;font-size:12px'>Use 192.168.x.2 through 192.168.x.254. The gateway is set to 192.168.x.1 for that subnet.</p>"
     "<div style='margin:12px 0;color:#8b949e;font-size:12px'><strong>After setup</strong><ol style='padding-left:22px;margin:6px 0'><li>Log into your router&rsquo;s admin panel (usually by typing <code>192.168.1.1</code> into your web browser).</li><li>Navigate to the DHCP or LAN Settings section to find the DNS fields.</li><li>Update the fields with the following details:<ul style='padding-left:18px;margin:4px 0'><li>Primary DNS: Enter the IP address of this device. This routes network DNS traffic through the filter.</li><li>Secondary DNS: Enter 1.1.1.1 (Cloudflare) or 9.9.9.9 (Quad9).</li></ul></li></ol></div>"
     "<button style='width:100%;padding:12px;margin-top:8px;border-radius:6px;border:0;background:#3fb950;color:#000;font-weight:600;cursor:pointer'>Connect</button>"
     "</form><footer style='margin:auto 0 0;padding-top:28px;text-align:center;color:#8b949e;font-size:12px'>"
     "Modded by <a href='https://bit.ly/m/IssamKanzi' target='_blank' rel='noopener noreferrer' style='color:inherit'>ISSAM. K</a><br>"
     "(Based on M-Abozaid&rsquo;s <a href='https://github.com/M-Abozaid/esp32-c3-adblock' target='_blank' rel='noopener noreferrer' style='color:inherit'>esp32-c3-adblock</a>)"
-    "</footer><script>const s=document.getElementById('static'),i=document.getElementById('ip');s.onchange=()=>i.disabled=!s.checked;</script></body>";
+    "</footer><script>const s=document.getElementById('static'),i=document.getElementById('ip');s.onchange=()=>{i.disabled=!s.checked;i.required=s.checked;if(!s.checked)i.value=''};</script></body>";
   web.send(200, "text/html", html);
 }
 static void handleWifiSave() {
@@ -720,14 +788,32 @@ static void handleWifiSave() {
   bool enableStaticIp = web.hasArg("static");
   IPAddress requestedIp;
   if (enableStaticIp && !parseStaticIp(web.arg("ip"), requestedIp)) {
-    web.send(400, "text/plain", "Use an available address from 192.168.1.2 to 192.168.1.254.");
+    web.send(400, "text/plain", "Use an available address from 192.168.x.2 to 192.168.x.254.");
     return;
   }
-  prefs.begin("wifi", false);
+  if (!prefs.begin("wifi", false)) {
+    web.send(500, "text/plain", "Could not open saved WiFi settings.");
+    return;
+  }
   prefs.remove("force-portal");
-  prefs.putString("ssid", ss); prefs.putString("pass", pw); prefs.putBool("static", enableStaticIp);
-  if (enableStaticIp) prefs.putString("ip", requestedIp.toString());
+  bool saved = prefs.putString("ssid", ss) == ss.length() &&
+               prefs.putString("pass", pw) == pw.length() &&
+               prefs.putBool("static", enableStaticIp) == 1 &&
+               prefs.putBool("network-v2", true) == 1;
+  if (enableStaticIp) {
+    String ip = requestedIp.toString();
+    saved = (prefs.putString("ip", ip) == ip.length()) && saved;
+  }
+  String verifiedIp = prefs.getString("ip", "");
+  saved = saved &&
+          prefs.getBool("static", !enableStaticIp) == enableStaticIp &&
+          prefs.getBool("network-v2", false) &&
+          (!enableStaticIp || verifiedIp == requestedIp.toString());
   prefs.end();
+  if (!saved) {
+    web.send(500, "text/plain", "Could not save WiFi settings. Please try again.");
+    return;
+  }
   web.send(200, "text/html", "<!doctype html><meta charset=utf-8><body style='font:16px system-ui;text-align:center;margin-top:60px'>"
                              "&#9989; Saved. Restarting and joining <b>" + ss + "</b>&hellip;<br><br>"
                              "Reconnect your phone to your normal WiFi, then find the box at <b>c3adblock.local</b>.</body>");
@@ -769,11 +855,11 @@ void setup() {
   loadCustom(); loadAllowlist(); loadAdblockExcluded(); loadBanPlusSpared(); loadUpdateCfg(); loadSchedule(); loadLedSchedule(); loadManualState();
   Serial.printf("custom: %d, adblock exclusions: %d, ban+ spared: %d\n", numCustom, numAdblockExcluded, numBanPlusSpared);
 
-  // Hold BOOT (GPIO9) at power-on to wipe saved WiFi and force the setup portal.
+  // Hold BOOT (GPIO9) at power-on to clear WiFi settings and open setup.
   pinMode(9, INPUT_PULLUP);
   bool bootHeld = (digitalRead(9) == LOW);
   if (bootHeld) { delay(60); bootHeld = (digitalRead(9) == LOW); }
-  if (bootHeld) { prefs.begin("wifi", false); prefs.remove("ssid"); prefs.remove("pass"); prefs.end();
+  if (bootHeld) { forgetWifiCredentials();
     Serial.println("[setup] BOOT held -> cleared saved WiFi"); }
   pinMode(WIFI_LED_PIN, OUTPUT);
   updateStatusLeds();
@@ -842,16 +928,27 @@ void setup() {
     IPAddress requestedIp;
     if (enableStaticIp) {
       if (!parseStaticIp(web.arg("ip"), requestedIp)) {
-        web.send(400, "text/plain", "Use an available address from 192.168.1.2 to 192.168.1.254.");
+        web.send(400, "text/plain", "Use an available address from 192.168.x.2 to 192.168.x.254.");
         return;
       }
-      configuredStaticIp = requestedIp;
+    }
+    if (!prefs.begin("wifi", false)) {
+      web.send(500, "text/plain", "Could not open saved WiFi settings.");
+      return;
+    }
+    bool saved = prefs.putBool("static", enableStaticIp) == 1;
+    saved = (prefs.putBool("network-v2", true) == 1) && saved;
+    String ip = requestedIp.toString();
+    if (enableStaticIp) saved = (prefs.putString("ip", ip) == ip.length()) && saved;
+    bool verified = prefs.getBool("static", !enableStaticIp) == enableStaticIp;
+    if (enableStaticIp) verified = verified && prefs.getString("ip", "") == ip;
+    prefs.end();
+    if (!saved || !verified) {
+      web.send(500, "text/plain", "Could not verify the saved network settings. The device was not restarted.");
+      return;
     }
     staticIpEnabled = enableStaticIp;
-    prefs.begin("wifi", false);
-    prefs.putBool("static", staticIpEnabled);
-    if (enableStaticIp) prefs.putString("ip", configuredStaticIp.toString());
-    prefs.end();
+    if (enableStaticIp) configuredStaticIp = requestedIp;
     web.send(200, "text/plain", "Network settings saved; restarting.");
     delay(500);
     ESP.restart();
