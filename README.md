@@ -106,4 +106,6 @@ dig @<c3-ip> github.com        # -> real IP  (forwarded)
 
 Modded by [ISSAM. K](https://bit.ly/m/IssamKanzi)
 
+☕ [Buy me a coffee](https://www.paypal.com/paypalme/IssamKanzi) to support the project.
+
 Based on M-Abozaid's [esp32-c3-adblock](https://github.com/M-Abozaid/esp32-c3-adblock) (Inspired by [s60sc/ESP32_AdBlocker](https://github.com/s60sc/ESP32_AdBlocker) — the "answer 0.0.0.0 for blocklisted domains" idea. This is an independent from-scratch implementation focused on the hash-in-flash optimization for PSRAM-less chips.)
