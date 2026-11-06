@@ -1,8 +1,10 @@
-# C3 AdBlocker + v1.1
+# C3 AdBlocker + v2.0
 
 A DNS sinkhole for ESP32-C3 boards with 4 MB flash and no PSRAM. It stores domains as sorted, five-byte (40-bit) FNV-1a hashes in flash and binary-searches them instead of loading the blocklist into RAM. A match returns `0.0.0.0`; other DNS queries are forwarded to Quad9 (`9.9.9.9`).
 
 The current partition layout supports a blocklist of up to **500,000 hash entries**. At that size the binary search takes about 19 flash reads per hash lookup. The list uses about 2.5 MB; it is not included in the browser firmware installer.
+
+Version **2.0** adds multiline custom blocking: paste or type one domain per line in the dashboard and submit them together. Duplicate or invalid entries are skipped; the existing limit remains 200 custom blocked domains. The custom-domain entry box matches the dashboard's dark input style and expands for multiple lines.
 
 The blocklist builder excludes Reddit, YouTube, and other listed social/video roots, including their subdomains. Very large lists can still contain false positives outside those exclusions.
 
@@ -27,7 +29,7 @@ Printing notes:
 
 ## Browser Web Flasher
 
-Open the [C3 AdBlocker + Web Flasher](https://tr04blesome.github.io/ESP32-C3-SUPERMINI-AdBlocker/) in Chrome or Edge on a desktop computer, connect the ESP32-C3 by USB, and choose **Connect & Install**. Version **1.1** adds persistent DHCP/static-IP selection, a live-IP dashboard header, and more responsive dashboard handling. The installer flashes the bootloader, partition table, and firmware. It includes **no Wi-Fi credentials and no blocklist**. A clean first install prompts to erase the device; this clears existing data.
+Open the [C3 AdBlocker + Web Flasher](https://tr04blesome.github.io/ESP32-C3-SUPERMINI-AdBlocker/) in Chrome or Edge on a desktop computer, connect the ESP32-C3 by USB, and choose **Connect & Install**. Version **2.0** adds multiline custom-domain blocking in the dashboard, alongside persistent DHCP/static-IP selection and the live-IP dashboard header. The installer flashes the bootloader, partition table, and credential-free firmware. It includes **no Wi-Fi credentials and no blocklist**. A clean first install prompts to erase the device; this clears existing data.
 
 After flashing, join the open `C3-AdBlock-XXXX` access point and enter the Wi-Fi name and password on the setup page. The device does not include a blocklist until you upload one from the dashboard.
 
@@ -60,7 +62,7 @@ py tools/build_blocklist.py "AdBlocker Blocklists/MaxSocialSafeBlocklist.bin" \
 
 The output is a five-byte-per-entry binary file. Upload it in the dashboard’s **Blocklist — Upload** section. Large uploads yield to the ESP32 scheduler to avoid watchdog resets; filesystem write or interrupted-upload errors are reported instead of accepting a truncated list. The current firmware does not bundle a list in its web-flasher image.
 
-OR get the readymade blocklist of your choice in the files. All of them are social media and youtube safe. You can still add up to 100 domains to the allow list just to be certain, and 200 more custom blocked domains.
+OR get the readymade blocklist of your choice in the files. All of them are social media and youtube safe. You can still add up to 100 domains to the allow list just to be certain, and 200 more custom blocked domains, entered individually or as a newline-separated list.
 
 ## Network Setup
 

@@ -25,7 +25,7 @@ static const char* WIFI_PASS = "";
 #endif
 
 // ---- config ----
-static const char* FIRMWARE_VERSION = "1.1.0";
+static const char* FIRMWARE_VERSION = "2.0";
 static const IPAddress UPSTREAM(9, 9, 9, 9);     // Quad9
 static const IPAddress WIFI_STATIC_IP(192, 168, 1, 99);
 static const IPAddress WIFI_SUBNET(255, 255, 255, 0);
@@ -360,11 +360,28 @@ static void loadCustom() {
   f.close();
 }
 static void saveCustom() { File f = LittleFS.open("/custom.txt", "w"); if (!f) return; for (int i = 0; i < numCustom; i++) f.println(customDom[i]); f.close(); }
-static bool addCustom(String d) {
+static bool appendCustom(String d) {
   d.trim(); d.toLowerCase(); if (d.startsWith("www.")) d = d.substring(4);
   if (!d.length() || d.indexOf('.') < 0 || numCustom >= MAX_CUSTOM) return false;
   for (int i = 0; i < numCustom; i++) if (customDom[i] == d) return false;
-  customDom[numCustom] = d; customHash[numCustom] = fnv40(d.c_str(), d.length()); numCustom++; saveCustom(); return true;
+  customDom[numCustom] = d; customHash[numCustom] = fnv40(d.c_str(), d.length()); numCustom++; return true;
+}
+static bool addCustom(String d) {
+  bool added = appendCustom(d);
+  if (added) saveCustom();
+  return added;
+}
+static int addCustomList(String list) {
+  int added = 0;
+  list.replace("\r", "\n");
+  while (list.length()) {
+    int newline = list.indexOf('\n');
+    String domain = newline >= 0 ? list.substring(0, newline) : list;
+    if (newline >= 0) list = list.substring(newline + 1); else list = "";
+    if (appendCustom(domain)) added++;
+  }
+  if (added) saveCustom();
+  return added;
 }
 static void removeCustom(String d) {
   d.toLowerCase();
@@ -875,7 +892,8 @@ void setup() {
   web.on("/exclude", handleAdblockExclude);
   web.on("/banplus", handleBanPlus);
   web.on("/sethost", handleSetHost);
-  web.on("/addblock", []() { addCustom(web.arg("d")); web.send(200, "text/plain", "ok"); });
+  web.on("/addblock", HTTP_GET, []() { addCustomList(web.arg("d")); web.send(200, "text/plain", "ok"); });
+  web.on("/addblock", HTTP_POST, []() { addCustomList(web.arg("d")); web.send(200, "text/plain", "ok"); });
   web.on("/unblock", []() { removeCustom(web.arg("d")); web.send(200, "text/plain", "ok"); });
   web.on("/addallow", []() { addAllowed(web.arg("d")); web.send(200, "text/plain", "ok"); });
   web.on("/unallow", []() { removeAllowed(web.arg("d")); web.send(200, "text/plain", "ok"); });
