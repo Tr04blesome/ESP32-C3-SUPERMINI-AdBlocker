@@ -1,6 +1,6 @@
 {
   "name": "C3 AdBlocker +",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "new_install_prompt_erase": true,
   "builds": [
     {
@@ -9,7 +9,7 @@
         { "path": "bootloader.bin", "offset": 0 },
         { "path": "partitions.bin", "offset": 32768 },
         { "path": "boot_app0.bin", "offset": 57344 },
-        { "path": "firmware-v2.0.0.bin", "offset": 65536 }
+        { "path": "firmware-v2.1.0.bin", "offset": 65536 }
       ]
     }
   ]

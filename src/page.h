@@ -20,6 +20,8 @@ th{background:#21262d;color:#8b949e}th.compact-header{cursor:pointer}th.compact-
 button{background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:5px;padding:4px 9px;cursor:pointer}
 button:hover{background:#30363d}.ban{color:#f85149}.ban-red,.ban-green,.ban-spared,button.client-adblock{background:transparent;border:0;border-radius:0;width:22px;height:22px;padding:0;font-size:15px;line-height:20px}button.client-adblock.excluded{background:transparent;border:0}button.client-adblock:hover,.ban-red:hover,.ban-green:hover,.ban-spared:hover{background:transparent}input,textarea{background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:5px;padding:6px;font:inherit}#customdomains{height:30px;min-height:30px;resize:none;overflow-x:auto;overflow-y:hidden;white-space:pre;box-sizing:border-box;vertical-align:middle}
 h2{font-size:14px;color:#8b949e;margin:18px 0 8px}
+.list-scroll{max-height:320px;overflow-y:auto;overscroll-behavior:contain;border-radius:8px;margin-bottom:18px}
+.list-scroll table{margin-bottom:0}#allowlist tr,#cl tr{height:32px}
 .entry-count{margin-left:8px;font-size:12px;font-weight:400;color:#8b949e}
 #ct #col-blocked,#ct #col-allowed{width:10%!important}#ct #col-ban,#ct #col-banplus{width:4%!important}#ct th:nth-last-child(-n+2),#ct td:nth-last-child(-n+2){padding-left:0;padding-right:0;text-align:center}#ct th:nth-last-child(2),#ct td:nth-last-child(2){padding-right:4px}#ct th:last-child,#ct td:last-child{padding-left:4px}
 @media(max-width:600px){.exclude-header{font-size:0}.exclude-header::after{content:'Exc..';font-size:13px}}
@@ -44,10 +46,10 @@ h2{font-size:14px;color:#8b949e;margin:18px 0 8px}
 <div class=group-schedule><div class=section-head><span style=font-size:20px>🕒</span><b>Schedule</b></div><div class=section-controls><label>Start <input type=time id=schplusstart onchange="saveSchedules()"></label><label>Stop <input type=time id=schplusstop onchange="saveSchedules()"></label><label><input type=checkbox id=schedbanplus onchange="saveSchedules()"> Enable</label></div></div></div>
 <div class=cards id=sys></div>
 <h2>CLIENTS <small style="color:#8b949e;font-weight:normal">click a host name or MAC header to resize | click a host name to edit | use Exclude to bypass adblocking for a client</small></h2><table id=ct><colgroup><col id=col-host><col id=col-ip><col id=col-mac><col id=col-blocked><col id=col-allowed><col id=col-ban><col id=col-banplus></colgroup><thead><tr><th id=th-host class=compact-header title="Click to resize" onclick="toggleClientColumn('host')">Host name</th><th id=th-ip>IP</th><th id=th-mac class=compact-header title="Click to resize" onclick="toggleClientColumn('mac')">MAC</th><th class=short-header>Blocked</th><th class=short-header>Allowed</th><th class=exclude-header>Exclude</th><th class=ban-header>Ban</th></tr></thead><tbody></tbody></table>
-<h2>BAN ALLOWLIST <small id=allowcount class=entry-count>0/100</small></h2><div style=margin-bottom:8px><input id=allowdom placeholder="example.com" size=30><button onclick=addAllow()>Allow domain</button></div><table id=allowlist><tbody></tbody></table>
-<h2>CUSTOM BLOCKED DOMAINS <small id=customcount class=entry-count>0/200</small></h2>
+<h2>BAN ALLOWLIST <small id=allowcount class=entry-count>0/30</small></h2><div style=margin-bottom:8px><input id=allowdom placeholder="example.com" size=30><button onclick=addAllow()>Allow domain</button></div><div class=list-scroll><table id=allowlist><tbody></tbody></table></div>
+<h2>CUSTOM BLOCKED DOMAINS <small id=customcount class=entry-count>0/500</small></h2>
 <div style="margin-bottom:8px"><textarea id=customdomains rows=1 wrap=off placeholder="ads.example.com"></textarea><button onclick=addDom()>Block domains</button><br><small style="color:#8b949e">Enter one domain per line</small></div>
-<table id=cl><tbody></tbody></table>
+<div class=list-scroll><table id=cl><tbody></tbody></table></div>
 <h2>BLOCKLIST &mdash; UPLOAD</h2>
 <form id=upf style=margin-bottom:6px><input type=file id=blf accept=.bin><button>Upload blocklist</button> <span id=upmsg style=color:#8b949e></span></form>
 <div style="color:#8b949e;font-size:12px;margin-bottom:18px">build <code>blocklist.bin</code> with <code>tools/build_blocklist.py</code>, then upload here &mdash; no USB</div>
@@ -62,7 +64,7 @@ function toggleClientColumn(name){setClientColumn(name,!clientColumnCompact(name
 ['host','mac'].forEach(name=>setClientColumn(name,localStorage.getItem('client-col-'+name)==='1'));
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function editHost(cell){let old=cell.textContent==='—'?'':cell.textContent;let name=prompt('Host name',old);if(name===null)return;name=name.trim();fetch('/sethost?ip='+encodeURIComponent(cell.dataset.ip)+'&h='+encodeURIComponent(name)).then(load)}
-function addAllow(){let d=allowdom.value.trim();if(d){fetch('/addallow?d='+encodeURIComponent(d)).then(()=>{allowdom.value='';load()})}}
+async function addAllow(){let d=allowdom.value.trim();if(d){let r=await fetch('/addallow?d='+encodeURIComponent(d));if(!r.ok)alert(await r.text());else allowdom.value='';load()}}
 function togglePause(){if(blockstate.dataset.on=='1')fetch('/pause?s='+pausedur.value).then(load);else fetch('/resume').then(load);}
 function togglePlus(){if(banplusstate.dataset.on=='1')fetch('/stopplus').then(load);else fetch('/startplus?s='+pausedurplus.value).then(load);}
 function toggleConnectionLed(){fetch('/setled?f=connection&v='+(connectionledbtn.textContent=='On'?0:1)).then(load)}
@@ -76,7 +78,7 @@ function saveSchedules(){if(!schstart.value||!schstop.value||!schplusstart.value
 let dashboardLoadPending=false,dashboardReloadRequested=false;
 async function load(){if(dashboardLoadPending){dashboardReloadRequested=true;return}dashboardLoadPending=true;try{do{dashboardReloadRequested=false;await refreshDashboard()}while(dashboardReloadRequested)}catch(error){console.error('Dashboard refresh failed:',error)}finally{dashboardLoadPending=false}}
 async function refreshDashboard(){let s=await(await fetch('/stats.json')).json();
-allowcount.textContent=s.allow.length+'/100';customcount.textContent=s.custom.length+'/200';
+allowcount.textContent=s.allow.length+'/30';customcount.textContent=s.custom.length+'/500';
 deviceip.textContent=s.ip||'unavailable';
 let on=s.blocking!==false;blockstate.dataset.on=on?'1':'0';
 blockdot.textContent=on?'🛡️':'⏸️';blockbar.style.borderColor=on?'#30363d':'#f0883e';
@@ -94,7 +96,7 @@ ct.tBodies[0].innerHTML=s.clients.sort((a,b)=>(b.blocked+b.allowed)-(a.blocked+a
 cl.tBodies[0].innerHTML=s.custom.map(d=>`<tr><td>${d}</td><td style=text-align:right><button onclick="fetch('/unblock?d='+encodeURIComponent('${d}')).then(load)">remove</button></td></tr>`).join('')||'<tr><td style=color:#8b949e>none yet</td></tr>';
 allowlist.tBodies[0].innerHTML=s.allow.map(d=>`<tr><td>${esc(d)}</td><td style=text-align:right><button onclick="fetch('/unallow?d='+encodeURIComponent('${d}')).then(load)">remove</button></td></tr>`).join('')||'<tr><td style=color:#8b949e>none yet</td></tr>';
 }
-function addDom(){let d=customdomains.value.trim();if(d){let body=new URLSearchParams({d});fetch('/addblock',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body.toString()}).then(()=>{customdomains.value='';syncCustomDomains();load()})}}
+async function addDom(){let d=customdomains.value.trim();if(d){let body=new URLSearchParams({d});let r=await fetch('/addblock',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body.toString()});if(!r.ok)alert(await r.text());else{customdomains.value='';syncCustomDomains()}load()}}
 function syncCustomDomains(){let lines=customdomains.value.split(/\n/).length;let multiline=lines>1;customdomains.rows=multiline?Math.min(lines,5):1;customdomains.style.height=multiline?(30*lines>150?150:30*lines)+'px':'30px';customdomains.style.overflowY=lines>5?'auto':'hidden';requestAnimationFrame(()=>{if(!multiline)customdomains.scrollLeft=customdomains.scrollWidth})}
 function matchCustomDomainsWidth(){customdomains.style.width=allowdom.offsetWidth+'px'}
 customdomains.addEventListener('input',syncCustomDomains);

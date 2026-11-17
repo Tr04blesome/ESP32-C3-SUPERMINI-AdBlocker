@@ -25,7 +25,7 @@ static const char* WIFI_PASS = "";
 #endif
 
 // ---- config ----
-static const char* FIRMWARE_VERSION = "2.0";
+static const char* FIRMWARE_VERSION = "2.1";
 static const IPAddress UPSTREAM(9, 9, 9, 9);     // Quad9
 static const IPAddress WIFI_STATIC_IP(192, 168, 1, 99);
 static const IPAddress WIFI_SUBNET(255, 255, 255, 0);
@@ -64,9 +64,9 @@ static constexpr uint32_t CLIENT_IDLE_TIMEOUT_MS = 24UL * 60UL * 60UL * 1000UL;
 static constexpr uint32_t CLIENT_MAINTENANCE_INTERVAL_MS = 60UL * 1000UL;
 static uint32_t lastClientMaintenanceMs = 0;
 
-static const int MAX_CUSTOM = 200;
+static const int MAX_CUSTOM = 500;
 String customDom[MAX_CUSTOM]; uint64_t customHash[MAX_CUSTOM]; int numCustom = 0;
-static const int MAX_ALLOW = 100;
+static const int MAX_ALLOW = 30;
 String allowDom[MAX_ALLOW]; int numAllow = 0;
 
 static const int MAX_CLIENT_FLAGS = 32;
@@ -371,17 +371,26 @@ static bool addCustom(String d) {
   if (added) saveCustom();
   return added;
 }
-static int addCustomList(String list) {
+static int addCustomList(String list, bool& limitReached) {
   int added = 0;
+  limitReached = false;
   list.replace("\r", "\n");
   while (list.length()) {
     int newline = list.indexOf('\n');
     String domain = newline >= 0 ? list.substring(0, newline) : list;
     if (newline >= 0) list = list.substring(newline + 1); else list = "";
+    if (numCustom >= MAX_CUSTOM) { limitReached = true; break; }
     if (appendCustom(domain)) added++;
   }
   if (added) saveCustom();
   return added;
+}
+static void handleAddCustom() {
+  bool limitReached = false;
+  int added = addCustomList(web.arg("d"), limitReached);
+  String message = "Added " + String(added) + " domain(s).";
+  if (limitReached) message += " Custom domain limit reached (500).";
+  web.send(limitReached ? 409 : 200, "text/plain", message);
 }
 static void removeCustom(String d) {
   d.toLowerCase();
@@ -892,10 +901,14 @@ void setup() {
   web.on("/exclude", handleAdblockExclude);
   web.on("/banplus", handleBanPlus);
   web.on("/sethost", handleSetHost);
-  web.on("/addblock", HTTP_GET, []() { addCustomList(web.arg("d")); web.send(200, "text/plain", "ok"); });
-  web.on("/addblock", HTTP_POST, []() { addCustomList(web.arg("d")); web.send(200, "text/plain", "ok"); });
+  web.on("/addblock", HTTP_GET, handleAddCustom);
+  web.on("/addblock", HTTP_POST, handleAddCustom);
   web.on("/unblock", []() { removeCustom(web.arg("d")); web.send(200, "text/plain", "ok"); });
-  web.on("/addallow", []() { addAllowed(web.arg("d")); web.send(200, "text/plain", "ok"); });
+  web.on("/addallow", []() {
+    bool added = addAllowed(web.arg("d"));
+    if (!added && numAllow >= MAX_ALLOW) web.send(409, "text/plain", "Ban Allowlist limit reached (30).");
+    else web.send(200, "text/plain", "ok");
+  });
   web.on("/unallow", []() { removeAllowed(web.arg("d")); web.send(200, "text/plain", "ok"); });
   web.on("/pause", []() {                    // /pause?s=300  (0 or absent = indefinite)
     long s = web.hasArg("s") ? web.arg("s").toInt() : 0;
