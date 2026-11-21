@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blocklist Generator — C3 AdBlocker +</title>
+<meta name="description" content="Choose blocklist feeds, preview domains, and generate a blocklist for the ESP32-C3 AdBlocker.">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { font: 16px/1.6 system-ui, -apple-system, sans-serif; margin: 0; background: #0d1117; color: #c9d1d9; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 38px 20px 72px; }
+  h1 { font-size: 30px; margin: 0 0 4px; color: #fff; }
+  h2 { font-size: 18px; margin: 0 0 12px; color: #fff; }
+  p { margin: 8px 0; }
+  a { color: #58a6ff; }
+  .sub, .muted { color: #8b949e; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; margin: 18px 0; }
+  .feed { display: flex; gap: 10px; align-items: flex-start; padding: 11px 0; border-top: 1px solid #30363d; }
+  .feed:first-of-type { border-top: 0; }
+  input[type="checkbox"] { margin-top: 5px; accent-color: #3fb950; }
+  label { cursor: pointer; }
+  .feed small { display: block; color: #8b949e; }
+  .settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; margin-top: 18px; }
+  input[type="number"], input[type="search"], textarea { width: 100%; background: #0d1117; color: #c9d1d9; border: 1px solid #484f58; border-radius: 6px; padding: 10px; font: inherit; }
+  textarea { min-height: 100px; resize: vertical; }
+  .check { display: flex; gap: 10px; align-items: flex-start; }
+  button, .download { display: inline-block; border: 0; border-radius: 7px; padding: 11px 16px; font: 600 15px system-ui, sans-serif; cursor: pointer; text-decoration: none; }
+  button { background: #3fb950; color: #000; }
+  button:disabled { opacity: .55; cursor: wait; }
+  .download { background: #21262d; border: 1px solid #484f58; color: #c9d1d9; margin: 6px 6px 0 0; }
+  .note { color: #8b949e; font-size: 14px; }
+  .status { min-height: 26px; margin-top: 10px; }
+  .error { color: #ff7b72; }
+  .success { color: #3fb950; }
+  .stats { display: flex; gap: 10px 24px; flex-wrap: wrap; margin: 12px 0; }
+  .domain-list { max-height: 320px; overflow: auto; margin: 10px 0 0; padding: 10px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; font: 13px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+  .domain-list div { padding: 1px 0; }
+  [hidden] { display: none !important; }
+  @media (max-width: 520px) { .wrap { padding: 25px 14px 52px; } .card { padding: 16px; } }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="muted"><a href="./">← C3 AdBlocker + Web Flasher</a></p>
+  <h1>Blocklist Generator</h1>
+  <p class="sub">Choose public feeds, review the domains, and generate a blocklist for your device. Feed data is fetched when you build and processed in your browser. The output is not randomized, so it changes when the upstream feeds change.</p>
+
+  <form id="generator-form">
+    <section class="card" aria-labelledby="feeds-heading">
+      <h2 id="feeds-heading">Choose what to block</h2>
+      <label class="feed">
+        <input type="checkbox" name="feed" value="stevenblack" checked>
+        <span><strong>StevenBlack Unified</strong><small>Ads, trackers, and malware domains. Base protection.</small></span>
+      </label>
+      <label class="feed">
+        <input type="checkbox" name="feed" value="hagezi-light" checked>
+        <span><strong>HaGeZi Light</strong><small>Ads, trackers, and common online threats; designed for low breakage.</small></span>
+      </label>
+      <label class="feed">
+        <input type="checkbox" name="feed" value="hagezi-pro">
+        <span><strong>HaGeZi Pro</strong><small>Stronger blocking of ads, trackers, and telemetry. May cause more breakage.</small></span>
+      </label>
+      <label class="feed">
+        <input type="checkbox" name="feed" value="hagezi-tif">
+        <span><strong>HaGeZi Threat Intelligence Feeds</strong><small>Reported malware, phishing, scam, and command-and-control domains.</small></span>
+      </label>
+      <label class="feed">
+        <input type="checkbox" name="feed" value="stevenblack-extended">
+        <span><strong>StevenBlack extended</strong><small>Includes adult, gambling, fake-news, and social domains; broad and more likely to break sites.</small></span>
+      </label>
+      <p class="note">Feeds can overlap; duplicate domains are removed. A feed's contents are maintained by its publisher and can change over time.</p>
+    </section>
+
+    <section class="card" aria-labelledby="settings-heading">
+      <h2 id="settings-heading">Size and preferences</h2>
+      <div class="settings">
+        <div>
+          <label for="max-domains"><strong>Maximum hash entries</strong></label>
+          <input id="max-domains" type="number" min="1" max="500000" step="10000" value="500000" required>
+          <p class="note">Maximum 500,000 entries (about 2.5 MB). If the selected feeds exceed this limit, entries are sampled by hash order.</p>
+        </div>
+        <div>
+          <label class="check" for="social-safe">
+            <input id="social-safe" type="checkbox" checked>
+            <span><strong>Keep common social, video, and messaging sites working</strong><small class="muted">Excludes known service domains and subdomains, including their common CDNs. Turn off to allow selected feeds to block them.</small></span>
+          </label>
+        </div>
+      </div>
+      <div style="margin-top:18px">
+        <label for="custom-domains"><strong>Add your own domains</strong></label>
+        <textarea id="custom-domains" placeholder="One domain per line, for example:&#10;ads.example.com&#10;tracker.example.net"></textarea>
+        <p class="note">Custom domains count toward the size limit. Enter domains only, not URLs or wildcard rules.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Generate</h2>
+      <p class="note">Generation happens on this page. The selected feeds are downloaded directly from their publishers; your custom entries are not uploaded.</p>
+      <button id="generate" type="submit">Fetch feeds and generate</button>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+  </form>
+
+  <section id="result" class="card" hidden aria-labelledby="result-heading">
+    <h2 id="result-heading">Generated blocklist</h2>
+    <div id="stats" class="stats"></div>
+    <p id="collision-note" class="note"></p>
+    <p>
+      <a id="download-bin" class="download" href="#" download>Download device blocklist (.bin)</a>
+      <a id="download-txt" class="download" href="#" download>Download included domains (.txt)</a>
+    </p>
+    <h2 style="margin-top:22px">Included domain preview</h2>
+    <label for="domain-search">Search included domains</label>
+    <input id="domain-search" type="search" placeholder="Type part of a domain">
+    <p id="preview-count" class="note"></p>
+    <div id="domain-list" class="domain-list" aria-live="polite"></div>
+    <p class="note">The device stores 40-bit hashes, not domain names. Hash collisions are possible, so a collision can block a domain that is not shown in this list.</p>
+  </section>
+
+  <p class="note">Sources: <a href="https://github.com/StevenBlack/hosts" target="_blank" rel="noopener noreferrer">StevenBlack</a> and <a href="https://github.com/hagezi/dns-blocklists" target="_blank" rel="noopener noreferrer">HaGeZi</a>. Use the <a href="./">web flasher</a> to install firmware; upload the generated file from your device dashboard.</p>
+</main>
+<script src="./blocklist-generator.js"></script>
+</body>
+</html>

@@ -33,6 +33,8 @@ Open the [C3 AdBlocker + Web Flasher](https://tr04blesome.github.io/ESP32-C3-SUP
 
 After flashing, join the open `C3-AdBlock-XXXX` access point and enter the Wi-Fi name and password on the setup page. The device does not include a blocklist until you upload one from the dashboard.
 
+Use the [Blocklist Generator](https://tr04blesome.github.io/ESP32-C3-SUPERMINI-AdBlocker/blocklist-generator.html) beside the web flasher to choose feeds, set a maximum size, preview or search included domains, and download a device-ready `.bin` file plus a readable `.txt` list. It fetches the selected public feeds when you generate; generation happens in your browser and does not change or flash firmware. Upload the `.bin` file from the device dashboard.
+
 ## Build from Source
 
 Use a current PlatformIO Core. Build the credential-free firmware used by the web flasher with:
@@ -44,6 +46,8 @@ pio run -e webflasher
 The image is `.pio/build/webflasher/firmware.bin`. The regular `c3` environment includes `src/secrets.h` as a local fallback; do not commit that file or put personal credentials in public builds.
 
 ## Blocklists
+
+For an interactive, browser-based generator with selectable feeds, a size limit, domain preview, and downloadable `.bin` and `.txt` files, open the [Blocklist Generator](https://tr04blesome.github.io/ESP32-C3-SUPERMINI-AdBlocker/blocklist-generator.html). The generator fetches current feed contents when run. The command-line builder below remains available for custom sources and scripted builds.
 
 Build the default list (StevenBlack base plus Hagezi Light) with:
 

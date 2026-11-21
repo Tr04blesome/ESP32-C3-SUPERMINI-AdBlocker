@@ -27,6 +27,8 @@
   code { background: #21262d; padding: 1px 6px; border-radius: 5px; }
   .flags { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
   .flag { background: #21262d; border-radius: 6px; padding: 4px 10px; font-size: 13px; color: #8b949e; }
+  .secondary-link { display: inline-block; margin-top: 16px; padding: 9px 14px; border: 1px solid #3fb950; border-radius: 7px; color: #3fb950; font-weight: 600; text-decoration: none; }
+  .secondary-link:hover { background: #3fb950; color: #000; }
 </style>
 </head>
 <body>
@@ -47,6 +49,7 @@
       <span class="flag">~30 seconds</span>
       <span class="flag">firmware only</span>
     </div>
+    <a class="secondary-link" href="./blocklist-generator.html">Generate a blocklist</a>
   </div>
 
   <div class="card">
@@ -57,6 +60,7 @@
       <li>After it reboots, it makes a WiFi network called <code>C3-AdBlock-XXXX</code> — join it from your phone, pick your WiFi, type the password.</li>
       <li>Upload a blocklist from the dashboard, or add custom blocked domains one per line. Then set this device as your router DNS. Dashboard at <code>c3adblock.local</code>.</li>
     </ol>
+    <p class="note">Need a list? <a href="./blocklist-generator.html">Open the blocklist generator</a> to choose protection feeds, set a size limit, preview domains, and download a list for the dashboard.</p>
     <p class="note">This build contains no WiFi credentials or blocklist. The dashboard starts with blocking data empty until you provide a list.</p>
   </div>
 
